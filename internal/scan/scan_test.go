@@ -53,3 +53,36 @@ func TestCheckPort_OpenAndClosed(t *testing.T) {
 		}
 	})
 }
+
+// TestSelfCheckPort creates a temporary TCP listener on localhost,
+// runs the CheckPort function against it, and verifies that the
+// scanner correctly detects it as open.
+func TestSelfCheckPort(t *testing.T) {
+	// Start a temporary listener on a random available port
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to start temporary listener: %v", err)
+	}
+	defer ln.Close()
+
+	// Extract the chosen port number
+	_, portStr, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatalf("failed to parse listener address: %v", err)
+	}
+	port, _ := strconv.Atoi(portStr)
+
+	// Run the port check
+	ctx := context.Background()
+	timeout := 1 * time.Second
+
+	open, err := CheckPort(ctx, "127.0.0.1", port, timeout)
+	if err != nil {
+		t.Fatalf("unexpected error while checking port %d: %v", port, err)
+	}
+	if !open {
+		t.Fatalf("expected port %d to be open, but it was reported closed", port)
+	}
+
+	t.Logf("✅ Self-test passed: detected localhost port %d as OPEN", port)
+}
