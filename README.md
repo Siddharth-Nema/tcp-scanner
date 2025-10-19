@@ -4,12 +4,6 @@ A small TCP port scanner written in Go. This repository currently contains a sim
 
 This project is intentionally small and educational — it demonstrates basic network dialing with timeouts and use of Go's `context` for cancellation and deadlines. Concurrency and richer output formats are potential future additions.
 
-# tcp-scanner
-
-A small TCP port scanner written in Go. This repository currently contains a simple, sequential scanner that tests a range of TCP ports on a target host and reports which ports are open.
-
-This project is intentionally small and educational — it demonstrates basic network dialing with timeouts and use of Go's `context` for cancellation and deadlines. Concurrency and richer output formats are potential future additions.
-
 ## Features (current)
 
 - Sequential port scanning using `net.Dialer` + `DialContext`
