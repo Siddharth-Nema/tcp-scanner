@@ -2,9 +2,12 @@ package scan
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 // Result is the outcome for a single port check.
@@ -20,9 +23,10 @@ func worker(ctx context.Context, host string, ports <-chan int, results chan<- R
 	defer wg.Done()
 	for p := range ports {
 		start := time.Now()
+
 		// create a per-dial context with timeout derived from parent ctx
 		dialCtx, cancel := context.WithTimeout(ctx, timeout)
-		open, err := CheckPort(dialCtx, host, p, timeout) // CheckPort already respects ctx+timeout
+		open, err := CheckPort(dialCtx, host, p, timeout)
 		cancel()
 
 		results <- Result{
@@ -35,7 +39,7 @@ func worker(ctx context.Context, host string, ports <-chan int, results chan<- R
 }
 
 // ScanRangeConcurrent scans ports in [start..end] using `workers` concurrent workers.
-// Returns a slice of Results sorted by Port.
+// It shows a progress bar during the scan and returns a slice of Results sorted by Port.
 func ScanRangeConcurrent(ctx context.Context, host string, start, end, workers int, timeout time.Duration) []Result {
 	if workers <= 0 {
 		workers = 100
@@ -47,10 +51,22 @@ func ScanRangeConcurrent(ctx context.Context, host string, start, end, workers i
 		end = start
 	}
 
+	totalPorts := end - start + 1
+
 	ports := make(chan int, workers)
-	results := make(chan Result, (end - start + 1))
+	results := make(chan Result, totalPorts)
 
 	var wg sync.WaitGroup
+
+	// start progress bar
+	bar := progressbar.NewOptions(totalPorts,
+		progressbar.OptionSetDescription(fmt.Sprintf("Scanning %s", host)),
+		progressbar.OptionSetWidth(20),
+		progressbar.OptionShowCount(),
+		progressbar.OptionClearOnFinish(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetPredictTime(false),
+	)
 
 	// start worker goroutines
 	wg.Add(workers)
@@ -61,7 +77,6 @@ func ScanRangeConcurrent(ctx context.Context, host string, start, end, workers i
 	// feed ports
 	go func() {
 		for p := start; p <= end; p++ {
-			// If parent context cancelled, stop pushing more jobs
 			select {
 			case <-ctx.Done():
 				break
@@ -72,15 +87,16 @@ func ScanRangeConcurrent(ctx context.Context, host string, start, end, workers i
 		close(ports)
 	}()
 
-	// wait for workers to finish and then close results
+	// wait for workers and close results
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
 
-	// collect results
-	out := make([]Result, 0, end-start+1)
+	// collect results with progress updates
+	out := make([]Result, 0, totalPorts)
 	for r := range results {
+		_ = bar.Add(1)
 		out = append(out, r)
 	}
 
